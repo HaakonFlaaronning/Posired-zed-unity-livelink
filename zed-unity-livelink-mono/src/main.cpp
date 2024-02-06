@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     BodyTrackingParameters body_tracker_params;
     body_tracker_params.enable_tracking = true; // track people across grabs
     body_tracker_params.enable_body_fitting = true; // smooth skeletons moves
-    body_tracker_params.body_format = sl::BODY_FORMAT::BODY_38;
+    body_tracker_params.body_format = sl::BODY_FORMAT::BODY_34;
     body_tracker_params.detection_model = BODY_TRACKING_MODEL::HUMAN_BODY_ACCURATE;
     returned_state = zed.enableBodyTracking(body_tracker_params);
     if (returned_state != ERROR_CODE::SUCCESS) {

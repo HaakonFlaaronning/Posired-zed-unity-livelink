@@ -42,7 +42,7 @@ void print(string msg_prefix, sl::ERROR_CODE err_code = sl::ERROR_CODE::SUCCESS,
 static const sl::COORDINATE_SYSTEM COORDINATE_SYSTEM = sl::COORDINATE_SYSTEM::LEFT_HANDED_Y_UP;
 static const sl::UNIT UNIT = sl::UNIT::METER;
 static const sl::BODY_TRACKING_MODEL BODY_MODEL = sl::BODY_TRACKING_MODEL::HUMAN_BODY_ACCURATE;
-static const sl::BODY_FORMAT BODY_FORMAT = sl::BODY_FORMAT::BODY_38;
+static const sl::BODY_FORMAT BODY_FORMAT = sl::BODY_FORMAT::BODY_34;
 
 std::vector<sl::CameraIdentifier> cameras;
 
@@ -118,10 +118,10 @@ int main(int argc, char **argv) {
     // define fusion behavior 
     sl::BodyTrackingFusionRuntimeParameters body_tracking_runtime_parameters;
     // be sure that the detection skeleton is complete enough
-    body_tracking_runtime_parameters.skeleton_minimum_allowed_keypoints = 7;
+    body_tracking_runtime_parameters.skeleton_minimum_allowed_keypoints = 2;
 
     // we can also want to retrieve skeleton seen by multiple camera, in this case at least half of them
-    body_tracking_runtime_parameters.skeleton_minimum_allowed_camera = cameras.size() / 2.;
+    body_tracking_runtime_parameters.skeleton_minimum_allowed_camera = 1; // cameras.size() / 2.;
 
 #if DISPLAY_OGL
     GLViewer viewer;

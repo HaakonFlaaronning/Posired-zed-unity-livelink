@@ -291,7 +291,8 @@ void GLViewer::addSKeleton(sl::BodyData& obj, Simple3DObject& simpleObj, sl::flo
 }
 
 void GLViewer::addSKeleton(sl::BodyData& obj, Simple3DObject& simpleObj, sl::float4 clr_id, bool raw) {
-
+    // Log the format of the body
+    std::cout << "Body format: " << obj.keypoint.size() << std::endl;
     switch (obj.keypoint.size())
     {
     case 18:
