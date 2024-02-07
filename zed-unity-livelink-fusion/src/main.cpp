@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
     // define fusion behavior 
     sl::BodyTrackingFusionRuntimeParameters body_tracking_runtime_parameters;
     // be sure that the detection skeleton is complete enough
-    body_tracking_runtime_parameters.skeleton_minimum_allowed_keypoints = 2;
+    body_tracking_runtime_parameters.skeleton_minimum_allowed_keypoints = 6;
 
     // we can also want to retrieve skeleton seen by multiple camera, in this case at least half of them
     body_tracking_runtime_parameters.skeleton_minimum_allowed_camera = 1; // cameras.size() / 2.;
