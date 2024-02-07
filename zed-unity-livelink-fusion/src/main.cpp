@@ -47,159 +47,172 @@ static const sl::BODY_FORMAT BODY_FORMAT = sl::BODY_FORMAT::BODY_34;
 std::vector<sl::CameraIdentifier> cameras;
 
 int main(int argc, char **argv) {
-
-    if (argc != 2) {
-        std::cout << "Need a Localization file in input" << std::endl;
-        return 1;
-    }
-
-    std::string json_config_filename(argv[1]);
-
-    auto configurations = sl::readFusionConfigurationFile(json_config_filename, COORDINATE_SYSTEM, UNIT);
-
-    if (configurations.empty()) {
-        std::cout << "Empty configuration File." << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    // Check if the ZED camera should run within the same process or if they are running on the edge.
-    std::vector<SenderRunner> clients(configurations.size());
-    int id_ = 0;
-    for (auto conf : configurations) {
-        // if the ZED camera should run locally, then start a thread to handle it
-        if (conf.communication_parameters.getType() == sl::CommunicationParameters::COMM_TYPE::INTRA_PROCESS) {
-            std::cout << "Try to open ZED " << conf.serial_number << ".." << std::flush;
-            auto state = clients[id_++].open(conf.input_type, BODY_FORMAT);
-            if (state)
-                std::cout << ". ready !" << std::endl;
+    try {
+        if (argc != 2) {
+            std::cout << "Need a Localization file in input" << std::endl;
+            return 1;
         }
-        else
-            std::cout << "Fail to open ZED " << conf.serial_number << std::endl;
-    }
 
-    // start camera threads
-    for (auto& it : clients)
-        it.start();
+        std::string json_config_filename(argv[1]);
 
-    // Now that the ZED camera are running, we need to initialize the fusion module
-    sl::InitFusionParameters init_params;
-    init_params.coordinate_units = UNIT;
-    init_params.coordinate_system = COORDINATE_SYSTEM;
-    init_params.verbose = true;
+        auto configurations = sl::readFusionConfigurationFile(json_config_filename, COORDINATE_SYSTEM, UNIT);
 
-    // create and initialize it
-    sl::Fusion fusion;
-    fusion.init(init_params);
+        if (configurations.empty()) {
+            std::cout << "Empty configuration File." << std::endl;
+            return EXIT_FAILURE;
+        }
 
-    // subscribe to every cameras of the setup to internally gather their data
-    for (auto& it : configurations) {
-        sl::CameraIdentifier uuid(it.serial_number);
-        // to subscribe to a camera you must give its serial number, the way to communicate with it (shared memory or local network), and its world pose in the setup.
-        auto state = fusion.subscribe(uuid, it.communication_parameters, it.pose);
-        if (state != sl::FUSION_ERROR_CODE::SUCCESS)
-            std::cout << "Unable to subscribe to " << std::to_string(uuid.sn) << " . " << state << std::endl;
-        else
-            cameras.push_back(uuid);
-    }
-
-    // check that at least one camera is connected
-    if (cameras.empty()) {
-        std::cout << "no connections " << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    // as this sample shows how to fuse body detection from the multi camera setup
-    // we enable the Body Tracking module with its options
-    sl::BodyTrackingFusionParameters body_fusion_init_params;
-    body_fusion_init_params.enable_tracking = true;
-    body_fusion_init_params.enable_body_fitting = true;
-    fusion.enableBodyTracking(body_fusion_init_params);
-
-    // define fusion behavior 
-    sl::BodyTrackingFusionRuntimeParameters body_tracking_runtime_parameters;
-    // be sure that the detection skeleton is complete enough
-    body_tracking_runtime_parameters.skeleton_minimum_allowed_keypoints = 6;
-
-    // we can also want to retrieve skeleton seen by multiple camera, in this case at least half of them
-    body_tracking_runtime_parameters.skeleton_minimum_allowed_camera = 1; // cameras.size() / 2.;
-
-#if DISPLAY_OGL
-    GLViewer viewer;
-    viewer.init(argc, argv);
-#endif
-
-    // fusion outputs
-    sl::Bodies fused_bodies;
-    std::map<sl::CameraIdentifier, sl::Bodies> camera_raw_data;
-    sl::FusionMetrics metrics;
-
-    bool run = true;
-
-    // ----------------------------------
-    // UDP to Unity----------------------
-    // ----------------------------------
-    std::string servAddress;
-    unsigned short servPort;
-    UDPSocket sock;
-
-    sock.setMulticastTTL(1);
-
-    servAddress = "230.0.0.1";
-    servPort = 20001;
-
-    std::cout << "Sending fused data at " << servAddress << ":" << servPort << std::endl;
-
-    // run the fusion as long as the viewer is available.
-    while (run)
-    {
-        // run the fusion process (which gather data from all camera, sync them and process them)
-        if (fusion.process() == sl::FUSION_ERROR_CODE::SUCCESS) {
-            // Retrieve fused body
-            fusion.retrieveBodies(fused_bodies, body_tracking_runtime_parameters);
-            // for debug, you can retrieve the data send by each camera
-            for (auto& id : cameras)
-                fusion.retrieveBodies(camera_raw_data[id], body_tracking_runtime_parameters, id);
-            // get metrics about the fusion process for monitoring purposes
-            fusion.getProcessMetrics(metrics);
-
-#if DISPLAY_OGL
-            // update the 3D view
-            viewer.updateBodies(fused_bodies, camera_raw_data, metrics);
-#endif
-            if (fused_bodies.is_new)
-            {
-                try
-                {
-                    // ----------------------------------
-                    // UDP to Unity----------------------
-                    // ----------------------------------
-                    std::string data_to_send = getJson(metrics, fused_bodies, fused_bodies.body_format).dump();
-                    sock.sendTo(data_to_send.data(), data_to_send.size(), servAddress, servPort);
-                }
-                catch (SocketException& e)
-                {
-
-                    cerr << e.what() << endl;
-                }
+        // Check if the ZED camera should run within the same process or if they are running on the edge.
+        std::vector<SenderRunner> clients(configurations.size());
+        int id_ = 0;
+        for (auto conf : configurations) {
+            // if the ZED camera should run locally, then start a thread to handle it
+            if (conf.communication_parameters.getType() == sl::CommunicationParameters::COMM_TYPE::INTRA_PROCESS) {
+                std::cout << "Try to open ZED " << conf.serial_number << ".." << std::flush;
+                auto state = clients[id_++].open(conf.input_type, BODY_FORMAT);
+                if (state)
+                    std::cout << ". ready !" << std::endl;
             }
+            else
+                std::cout << "Fail to open ZED " << conf.serial_number << std::endl;
         }
 
-#if DISPLAY_OGL
-        run = viewer.isAvailable();
-#endif
-        sl::sleep_ms(10);
+        // start camera threads
+        for (auto& it : clients)
+            it.start();
+
+        // Now that the ZED camera are running, we need to initialize the fusion module
+        sl::InitFusionParameters init_params;
+        init_params.coordinate_units = UNIT;
+        init_params.coordinate_system = COORDINATE_SYSTEM;
+        init_params.verbose = true;
+
+        // create and initialize it
+        sl::Fusion fusion;
+        fusion.init(init_params);
+
+        // subscribe to every cameras of the setup to internally gather their data
+        for (auto& it : configurations) {
+            sl::CameraIdentifier uuid(it.serial_number);
+            // to subscribe to a camera you must give its serial number, the way to communicate with it (shared memory or local network), and its world pose in the setup.
+            auto state = fusion.subscribe(uuid, it.communication_parameters, it.pose);
+            if (state != sl::FUSION_ERROR_CODE::SUCCESS)
+                std::cout << "Unable to subscribe to " << std::to_string(uuid.sn) << " . " << state << std::endl;
+            else
+                cameras.push_back(uuid);
+        }
+
+        // check that at least one camera is connected
+        if (cameras.empty()) {
+            std::cout << "no connections " << std::endl;
+            return EXIT_FAILURE;
+        }
+
+        // as this sample shows how to fuse body detection from the multi camera setup
+        // we enable the Body Tracking module with its options
+        sl::BodyTrackingFusionParameters body_fusion_init_params;
+        body_fusion_init_params.enable_tracking = true;
+        body_fusion_init_params.enable_body_fitting = true;
+        fusion.enableBodyTracking(body_fusion_init_params);
+
+        // define fusion behavior 
+        sl::BodyTrackingFusionRuntimeParameters body_tracking_runtime_parameters;
+        // be sure that the detection skeleton is complete enough
+        body_tracking_runtime_parameters.skeleton_minimum_allowed_keypoints = 6;
+
+        // we can also want to retrieve skeleton seen by multiple camera, in this case at least half of them
+        body_tracking_runtime_parameters.skeleton_minimum_allowed_camera = 1; // cameras.size() / 2.;
+
+    #if DISPLAY_OGL
+        GLViewer viewer;
+        viewer.init(argc, argv);
+    #endif
+
+        // fusion outputs
+        sl::Bodies fused_bodies;
+        std::map<sl::CameraIdentifier, sl::Bodies> camera_raw_data;
+        sl::FusionMetrics metrics;
+
+        bool run = true;
+
+        // ----------------------------------
+        // UDP to Unity----------------------
+        // ----------------------------------
+        std::string servAddress;
+        unsigned short servPort;
+        UDPSocket sock;
+
+        sock.setMulticastTTL(1);
+
+        servAddress = "230.0.0.1";
+        servPort = 20001;
+
+        std::cout << "Sending fused data at " << servAddress << ":" << servPort << std::endl;
+
+        // run the fusion as long as the viewer is available.
+        while (run)
+        {    
+                // run the fusion process (which gather data from all camera, sync them and process them)
+                if (fusion.process() == sl::FUSION_ERROR_CODE::SUCCESS) {
+                    // Retrieve fused body
+                    fusion.retrieveBodies(fused_bodies, body_tracking_runtime_parameters);
+                    // for debug, you can retrieve the data send by each camera
+                    for (auto& id : cameras)
+                        fusion.retrieveBodies(camera_raw_data[id], body_tracking_runtime_parameters, id);
+                    // get metrics about the fusion process for monitoring purposes
+                    fusion.getProcessMetrics(metrics);
+
+        #if DISPLAY_OGL
+                    // update the 3D view
+                    viewer.updateBodies(fused_bodies, camera_raw_data, metrics);
+        #endif
+                    if (fused_bodies.is_new)
+                    {
+                        try
+                        {
+                            // ----------------------------------
+                            // UDP to Unity----------------------
+                            // ----------------------------------
+                            std::string data_to_send = getJson(metrics, fused_bodies, fused_bodies.body_format).dump();
+                            sock.sendTo(data_to_send.data(), data_to_send.size(), servAddress, servPort);
+                        }
+                        catch (SocketException& e)
+                        {
+
+                            cerr << e.what() << endl;
+                        }
+                    }
+                }
+
+        #if DISPLAY_OGL
+                run = viewer.isAvailable();
+        #endif
+                sl::sleep_ms(10);
+        }
+    
+    
+
+    std::cout << "Exiting program" << std::endl;
+    #if DISPLAY_OGL
+
+        viewer.exit();
+    #endif
+
+        for (auto& it : clients)
+            it.stop();
+
+        fusion.close();
+
+        return EXIT_SUCCESS;
     }
-
-#if DISPLAY_OGL
-    viewer.exit();
-#endif
-
-    for (auto& it : clients)
-        it.stop();
-
-    fusion.close();
-
-    return EXIT_SUCCESS;
+    catch (std::exception& e) {
+        std::cout << "Exception: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+    catch (...) {
+        std::cout << "Unknown error" << std::endl;
+        return EXIT_FAILURE;
+    }
 }
 
 
